@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../models/ride_model.dart';
 import '../models/user_model.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import 'map_ride_screen.dart';
 
 class RequestRideScreen extends StatefulWidget {
   final UserModel user;
@@ -18,6 +20,8 @@ class _RequestRideScreenState extends State<RequestRideScreen> {
   final _formKey = GlobalKey<FormState>();
   final _sourceController = TextEditingController();
   final _destinationController = TextEditingController();
+  LatLng? _sourceLatLng;
+  LatLng? _destinationLatLng;
 
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
@@ -25,6 +29,49 @@ class _RequestRideScreenState extends State<RequestRideScreen> {
   bool _hasSearched = false;
   bool _isLoading = false;
   List<RideModel> _matchingRides = [];
+
+  Future<void> _pickLocationOnSatelliteMap(SelectionTarget target) async {
+    final result = await Navigator.of(context).push<LocationPickResult>(
+      MaterialPageRoute(
+        builder: (_) => MapRideScreen(
+          user: widget.user,
+          mode: MapScreenMode.pickLocation,
+          pickTarget: target,
+          initialAddress: target == SelectionTarget.pickup
+              ? _sourceController.text
+              : _destinationController.text,
+          initialPickup: target == SelectionTarget.pickup ? _sourceLatLng : null,
+          initialDropoff: target == SelectionTarget.dropoff ? _destinationLatLng : null,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        if (target == SelectionTarget.pickup) {
+          _sourceController.text = result.address;
+          _sourceLatLng = result.position;
+        } else {
+          _destinationController.text = result.address;
+          _destinationLatLng = result.position;
+        }
+      });
+    }
+  }
+
+  void _openSatelliteLiveMapBooking() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MapRideScreen(
+          user: widget.user,
+          mode: MapScreenMode.routeAndTrack,
+          initialAddress: _sourceController.text,
+          initialPickup: _sourceLatLng,
+          initialDropoff: _destinationLatLng,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -105,6 +152,10 @@ class _RequestRideScreenState extends State<RequestRideScreen> {
       type: 'requested',
       createdAt: DateTime.now().toIso8601String(),
       status: 'active',
+      pickupLat: _sourceLatLng?.latitude,
+      pickupLng: _sourceLatLng?.longitude,
+      dropoffLat: _destinationLatLng?.latitude,
+      dropoffLng: _destinationLatLng?.longitude,
     );
 
     await storage.addRide(requestedRideLog);
@@ -171,6 +222,10 @@ class _RequestRideScreenState extends State<RequestRideScreen> {
       type: 'requested',
       createdAt: DateTime.now().toIso8601String(),
       status: 'active',
+      pickupLat: _sourceLatLng?.latitude,
+      pickupLng: _sourceLatLng?.longitude,
+      dropoffLat: _destinationLatLng?.latitude,
+      dropoffLng: _destinationLatLng?.longitude,
     );
 
     await storage.addRide(newReq);
@@ -232,10 +287,15 @@ class _RequestRideScreenState extends State<RequestRideScreen> {
 
                       TextFormField(
                         controller: _sourceController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Desired Source',
                           hintText: 'e.g. North Campus Library',
-                          prefixIcon: Icon(Icons.my_location, color: AppTheme.primaryEmerald),
+                          prefixIcon: const Icon(Icons.my_location, color: AppTheme.primaryEmerald),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.satellite_alt_rounded, color: AppTheme.primaryEmerald),
+                            tooltip: 'Pick on Satellite Map',
+                            onPressed: () => _pickLocationOnSatelliteMap(SelectionTarget.pickup),
+                          ),
                         ),
                         validator: (val) {
                           if (val == null || val.trim().isEmpty) {
@@ -248,10 +308,15 @@ class _RequestRideScreenState extends State<RequestRideScreen> {
 
                       TextFormField(
                         controller: _destinationController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Desired Destination',
                           hintText: 'e.g. Engineering Block',
-                          prefixIcon: Icon(Icons.location_on, color: AppTheme.accentIndigo),
+                          prefixIcon: const Icon(Icons.location_on, color: AppTheme.accentIndigo),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.satellite_alt_rounded, color: AppTheme.accentIndigo),
+                            tooltip: 'Pick on Satellite Map',
+                            onPressed: () => _pickLocationOnSatelliteMap(SelectionTarget.dropoff),
+                          ),
                         ),
                         validator: (val) {
                           if (val == null || val.trim().isEmpty) {
@@ -301,6 +366,23 @@ class _RequestRideScreenState extends State<RequestRideScreen> {
                                 child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                               )
                             : const Text('Find Matching Rides', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+
+                      // Direct Satellite Route & Live Tracking Button
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: _openSatelliteLiveMapBooking,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryEmerald,
+                          side: const BorderSide(color: AppTheme.primaryEmerald),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.map_rounded, size: 18),
+                        label: const Text(
+                          'Book & Track on Satellite Map',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
                       ),
                     ],
                   ),

@@ -6,6 +6,7 @@ class StorageService {
   static const String _keyUsers = 'campus_ride_users';
   static const String _keyCurrentUser = 'campus_ride_current_user';
   static const String _keyRides = 'campus_ride_rides';
+  static const String _keyActiveRide = 'campus_ride_active_ride';
 
   static StorageService? _instance;
   static SharedPreferences? _prefs;
@@ -99,6 +100,51 @@ class StorageService {
     rides.insert(0, ride); // newest first
     final List<String> updatedList = rides.map((r) => r.toJson()).toList();
     await _prefs?.setStringList(_keyRides, updatedList);
+  }
+
+  Future<void> updateRide(RideModel updatedRide) async {
+    final rides = await getRides();
+    final index = rides.indexWhere((r) => r.id == updatedRide.id);
+    if (index != -1) {
+      rides[index] = updatedRide;
+      final List<String> updatedList = rides.map((r) => r.toJson()).toList();
+      await _prefs?.setStringList(_keyRides, updatedList);
+    }
+  }
+
+  Future<void> updateRideStatus(String rideId, String newStatus) async {
+    final rides = await getRides();
+    final index = rides.indexWhere((r) => r.id == rideId);
+    if (index != -1) {
+      final updated = rides[index].copyWith(status: newStatus);
+      rides[index] = updated;
+      final List<String> updatedList = rides.map((r) => r.toJson()).toList();
+      await _prefs?.setStringList(_keyRides, updatedList);
+
+      // Also update active ride if it matches
+      final active = getActiveRide();
+      if (active != null && active.id == rideId) {
+        await saveActiveRide(updated);
+      }
+    }
+  }
+
+  Future<void> saveActiveRide(RideModel ride) async {
+    await _prefs?.setString(_keyActiveRide, ride.toJson());
+  }
+
+  RideModel? getActiveRide() {
+    final String? jsonStr = _prefs?.getString(_keyActiveRide);
+    if (jsonStr == null || jsonStr.isEmpty) return null;
+    try {
+      return RideModel.fromJson(jsonStr);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearActiveRide() async {
+    await _prefs?.remove(_keyActiveRide);
   }
 
   Future<List<RideModel>> getUserHistory(String userId) async {

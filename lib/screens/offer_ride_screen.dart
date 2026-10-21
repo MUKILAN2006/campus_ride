@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import '../models/ride_model.dart';
 import '../models/user_model.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import 'map_ride_screen.dart';
 
 class OfferRideScreen extends StatefulWidget {
   final UserModel user;
@@ -18,11 +20,56 @@ class _OfferRideScreenState extends State<OfferRideScreen> {
   final _formKey = GlobalKey<FormState>();
   final _sourceController = TextEditingController();
   final _destinationController = TextEditingController();
+  LatLng? _sourceLatLng;
+  LatLng? _destinationLatLng;
 
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   int _availableSeats = 3;
   bool _isLoading = false;
+
+  Future<void> _pickLocationOnSatelliteMap(SelectionTarget target) async {
+    final result = await Navigator.of(context).push<LocationPickResult>(
+      MaterialPageRoute(
+        builder: (_) => MapRideScreen(
+          user: widget.user,
+          mode: MapScreenMode.pickLocation,
+          pickTarget: target,
+          initialAddress: target == SelectionTarget.pickup
+              ? _sourceController.text
+              : _destinationController.text,
+          initialPickup: target == SelectionTarget.pickup ? _sourceLatLng : null,
+          initialDropoff: target == SelectionTarget.dropoff ? _destinationLatLng : null,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        if (target == SelectionTarget.pickup) {
+          _sourceController.text = result.address;
+          _sourceLatLng = result.position;
+        } else {
+          _destinationController.text = result.address;
+          _destinationLatLng = result.position;
+        }
+      });
+    }
+  }
+
+  void _previewRouteOnMap() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MapRideScreen(
+          user: widget.user,
+          mode: MapScreenMode.previewRoute,
+          initialAddress: _sourceController.text,
+          initialPickup: _sourceLatLng,
+          initialDropoff: _destinationLatLng,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -114,6 +161,10 @@ class _OfferRideScreenState extends State<OfferRideScreen> {
         vehicleDetails: vehicleInfo,
         createdAt: DateTime.now().toIso8601String(),
         status: 'active',
+        pickupLat: _sourceLatLng?.latitude,
+        pickupLng: _sourceLatLng?.longitude,
+        dropoffLat: _destinationLatLng?.latitude,
+        dropoffLng: _destinationLatLng?.longitude,
       );
 
       final storage = await StorageService.getInstance();
@@ -231,10 +282,15 @@ class _OfferRideScreenState extends State<OfferRideScreen> {
               TextFormField(
                 controller: _sourceController,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Source Location *',
                   hintText: 'e.g. North Campus Library / Hostel A',
-                  prefixIcon: Icon(Icons.my_location_rounded, color: AppTheme.primaryEmerald),
+                  prefixIcon: const Icon(Icons.my_location_rounded, color: AppTheme.primaryEmerald),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.satellite_alt_rounded, color: AppTheme.primaryEmerald),
+                    tooltip: 'Pick on Satellite Map',
+                    onPressed: () => _pickLocationOnSatelliteMap(SelectionTarget.pickup),
+                  ),
                 ),
                 validator: (val) {
                   if (val == null || val.trim().isEmpty) {
@@ -249,10 +305,15 @@ class _OfferRideScreenState extends State<OfferRideScreen> {
               TextFormField(
                 controller: _destinationController,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Destination *',
                   hintText: 'e.g. Engineering Building / Metro Station',
-                  prefixIcon: Icon(Icons.location_on_rounded, color: AppTheme.accentIndigo),
+                  prefixIcon: const Icon(Icons.location_on_rounded, color: AppTheme.accentIndigo),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.satellite_alt_rounded, color: AppTheme.accentIndigo),
+                    tooltip: 'Pick on Satellite Map',
+                    onPressed: () => _pickLocationOnSatelliteMap(SelectionTarget.dropoff),
+                  ),
                 ),
                 validator: (val) {
                   if (val == null || val.trim().isEmpty) {
@@ -261,7 +322,28 @@ class _OfferRideScreenState extends State<OfferRideScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
+
+              // Preview Route on Satellite Map Button
+              if (_sourceController.text.isNotEmpty && _destinationController.text.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryEmerald,
+                      side: const BorderSide(color: AppTheme.primaryEmerald),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    ),
+                    icon: const Icon(Icons.map_rounded, size: 20),
+                    label: const Text(
+                      'Preview Route on Satellite Map',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: _previewRouteOnMap,
+                  ),
+                ),
+              const SizedBox(height: 6),
 
               // Date & Time Pickers
               Row(

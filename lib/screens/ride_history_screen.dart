@@ -161,6 +161,45 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> with SingleTicker
                     ),
                   ],
                 ),
+                if (ride.distanceKm != null || ride.fare != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (ride.rideCategory != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryEmerald.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            ride.rideCategory!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryEmerald,
+                            ),
+                          ),
+                        ),
+                      if (ride.distanceKm != null)
+                        Text(
+                          '${ride.distanceKm} km',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                        ),
+                      const Spacer(),
+                      if (ride.fare != null)
+                        Text(
+                          '\$${ride.fare!.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryEmerald,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
                 const Divider(height: 24),
 
                 Row(

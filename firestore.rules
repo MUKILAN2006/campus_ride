@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // User profiles: Only authenticated users can read; only the account owner can update
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update, delete: if isOwner(userId);
+    }
+
+    // Rides Collection:
+    // - Authenticated users can query and read available rides
+    // - Riders can create ride requests
+    // - Only the rider (owner) or assigned driver can update status or location coordinates
+    match /rides/{rideId} {
+      allow read: if isAuthenticated();
+      
+      // Rider creating a ride
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      
+      // Rider can cancel; Assigned driver can update driverLat/driverLng/status
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.driverId == request.auth.uid
+      );
+      
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Subcollection for real-time driver GPS tracking breadcrumbs
+      match /tracking/{trackingId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && (
+          get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
+        );
+      }
+    }
+  }
+}
